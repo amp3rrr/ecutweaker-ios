@@ -146,7 +146,7 @@ struct ConnectionRow: View {
                     .buttonStyle(.bordered)
                 } else {
                     Button {
-                        conn.connect()
+                        conn.connect(manual: true)
                     } label: {
                         Label("Connect", systemImage: "bolt.horizontal.circle")
                     }

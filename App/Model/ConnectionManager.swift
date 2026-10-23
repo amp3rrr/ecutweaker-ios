@@ -56,6 +56,8 @@ final class ConnectionManager: ObservableObject {
     private var consumerID: UUID?
     private var consumer: ((ElmEvent) -> Void)?
     private var timer: Timer?
+    private var failedAttempts = 0
+    private var lastAttempt = Date.distantPast
 
     init(log: LogStore) {
         self.log = log
@@ -94,7 +96,7 @@ final class ConnectionManager: ObservableObject {
         UserDefaults.standard.set(bleDeviceID, forKey: Keys.bleID)
         UserDefaults.standard.set(bleDeviceName, forKey: Keys.bleName)
         mode = .ble
-        connect()
+        connect(manual: true)
     }
 
     func selectMFi(serial: String?, name: String) {
@@ -103,13 +105,15 @@ final class ConnectionManager: ObservableObject {
         UserDefaults.standard.set(serial, forKey: Keys.mfiSerial)
         UserDefaults.standard.set(name, forKey: Keys.mfiName)
         mode = .mfi
-        connect()
+        connect(manual: true)
     }
 
     // MARK: - Connection
 
-    func connect() {
+    func connect(manual: Bool = false) {
+        if manual { failedAttempts = 0 }
         wantsConnection = true
+        lastAttempt = Date()
         guard let link = makeLink() else {
             log.append("No device selected")
             return
@@ -123,9 +127,12 @@ final class ConnectionManager: ObservableObject {
         session.disconnect()
     }
 
+    /// MainActivity's connection timer, with a back-off (4 s … 60 s) after repeated failures.
     func reconnectIfNeeded() {
         guard wantsConnection, !isConnected, !isConnecting, hasDevice else { return }
         if UIApplication.shared.applicationState == .background { return }
+        let delay = min(4.0 * pow(2.0, Double(min(failedAttempts, 4))), 60)
+        guard Date().timeIntervalSince(lastAttempt) >= delay - 0.5 else { return }
         connect()
     }
 
@@ -146,6 +153,8 @@ final class ConnectionManager: ObservableObject {
     private func dispatch(_ e: ElmEvent) {
         switch e {
         case .state(let s):
+            if s == .connected { failedAttempts = 0 }
+            if state == .connecting && (s == .none || s == .disconnected) { failedAttempts += 1 }
             state = s
             UIApplication.shared.isIdleTimerDisabled = (s == .connected)
         case .deviceName(let n):

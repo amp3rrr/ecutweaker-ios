@@ -355,7 +355,7 @@ public final class ScreenController {
             ecu.setDefaultSDS(sdsName)
             log("Default diag session switched to \(ecu.defaultSDS)")
         }
-        if isConnected && canTimeout > 0 { session.setTimeOut(canTimeout) }
+        if isConnected { session.setTimeOut(canTimeout) }
     }
 
     private func setElmWorking(queueEmpty: Bool) {

@@ -171,7 +171,7 @@ struct DevicePickerView: View {
             TextField("Port", value: $conn.wifiPort, format: .number.grouping(.never))
                 .keyboardType(.numberPad)
             Button {
-                conn.connect()
+                conn.connect(manual: true)
                 dismiss()
             } label: {
                 Label("Connect", systemImage: "bolt.horizontal.circle")
