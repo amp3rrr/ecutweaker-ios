@@ -89,8 +89,22 @@ struct ScreenCanvas: View {
             .frame(width: max(px(d.rect.w - d.width), 4), height: px(d.rect.h), alignment: .leading)
             .background(bg)
             .overlay(Rectangle().stroke(Color.green.opacity(0.7), lineWidth: 1))
-            .textSelection(.enabled)
+            .contextMenu { valueMenu(d.text) }
             .offset(x: px(d.rect.x + d.width), y: px(d.rect.y))
+    }
+
+    @ViewBuilder
+    private func valueMenu(_ name: String) -> some View {
+        Button {
+            UIPasteboard.general.string = vm.values[name] ?? ""
+        } label: {
+            Label("Copy value", systemImage: "doc.on.doc")
+        }
+        Button {
+            vm.showDiagnostics(for: name)
+        } label: {
+            Label("Details", systemImage: "info.circle")
+        }
     }
 
     // MARK: Inputs (editable values / lists)

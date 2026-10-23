@@ -32,6 +32,9 @@ struct ScreenView: View {
             .sheet(item: $vm.dtcReport) { report in
                 DTCReportView(report: report)
             }
+            .sheet(item: $vm.diagnostics) { d in
+                ValueDiagnosticsView(diagnostics: d)
+            }
             .confirmationDialog("Clear all DTCs?", isPresented: $confirmClear, titleVisibility: .visible) {
                 Button("Clear all DTC", role: .destructive) { vm.clearDTC() }
                 Button("Cancel", role: .cancel) {}
@@ -141,6 +144,9 @@ struct ScreenView: View {
             Button { zoom = 0 } label: { Label("Fit width", systemImage: "arrow.left.and.right") }
             Button { showLog.toggle() } label: { Label(showLog ? "Hide log" : "Show log", systemImage: "text.alignleft") }
             Button { showSettings = true } label: { Label("Settings", systemImage: "gearshape") }
+            if !vm.ecuExportURLs.isEmpty {
+                ShareLink(items: vm.ecuExportURLs) { Label("Share ECU file", systemImage: "square.and.arrow.up") }
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
         }
@@ -269,6 +275,37 @@ struct DTCReportView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("OK") { dismiss() } }
                 ToolbarItem(placement: .navigationBarLeading) {
                     ShareLink(item: report.items.enumerated().map { "DTC #\($0.offset + 1)\n" + $0.element.map { "* " + $0 }.joined(separator: "\n") }.joined(separator: "\n\n"))
+                }
+            }
+        }
+    }
+}
+
+/// Long-press → Details on a value: its definition in the ECU file and how the last reply decodes.
+struct ValueDiagnosticsView: View {
+    let diagnostics: ValueDiagnostics
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(diagnostics.text)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .navigationTitle(diagnostics.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        UIPasteboard.general.string = diagnostics.text
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    ShareLink(item: diagnostics.text) { Image(systemName: "square.and.arrow.up") }
                 }
             }
         }

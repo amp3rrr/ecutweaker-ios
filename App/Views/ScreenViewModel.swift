@@ -6,6 +6,12 @@ struct DTCReport: Identifiable {
     let items: [[String]]
 }
 
+struct ValueDiagnostics: Identifiable {
+    let id = UUID()
+    let name: String
+    let text: String
+}
+
 /// Bridges ScreenController (ScreenActivity logic) to SwiftUI.
 @MainActor
 final class ScreenViewModel: ObservableObject {
@@ -18,6 +24,9 @@ final class ScreenViewModel: ObservableObject {
     @Published private(set) var busy = false
     @Published var dtcReport: DTCReport?
     @Published var alertText: String?
+    @Published var diagnostics: ValueDiagnostics?
+    /// Copies of the ECU file and layout in a temporary folder, for sharing.
+    @Published private(set) var ecuExportURLs: [URL] = []
     @Published private(set) var openError: String?
 
     private(set) var controller: ScreenController?
@@ -57,6 +66,8 @@ final class ScreenViewModel: ObservableObject {
                 controller = c
                 log.append("Opened \(href) (\(c.ecu.protocolName))")
                 log.append("Default diag session : \(c.ecu.defaultSDS)")
+                log.append(c.ecu.dataSummary)
+                ecuExportURLs = Self.writeExport(c.ecuFiles())
                 if let last = UserDefaults.standard.string(forKey: "lastScreen.\(href)"), c.layout.screen(last) != nil {
                     c.drawScreen(last)
                 }
@@ -103,6 +114,21 @@ final class ScreenViewModel: ObservableObject {
         }
         c.setAutoReload(!c.autoReload)
         sync()
+    }
+
+    func showDiagnostics(for name: String) {
+        guard let c = controller else { return }
+        diagnostics = ValueDiagnostics(name: name, text: c.diagnostics(forData: name))
+    }
+
+    private static func writeExport(_ files: [(name: String, data: Data)]) -> [URL] {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ecu-export", isDirectory: true)
+        try? FileManager.default.removeItem(at: dir)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return files.compactMap { f in
+            let url = dir.appendingPathComponent((f.name as NSString).lastPathComponent)
+            return (try? f.data.write(to: url)) != nil ? url : nil
+        }
     }
 
     func press(_ uniqueName: String) { controller?.executeButton(uniqueName) }

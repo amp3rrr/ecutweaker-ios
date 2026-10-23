@@ -29,6 +29,8 @@ public final class ScreenController {
     private var startRequestSet = Set<String>()
     private var requestsInputs = [String: [Layout.InputData]]()
     private var lastSDSTime = Date.distantPast
+    /// Last reply (hex) of each request, for diagnostics.
+    public private(set) var lastResponses: [String: String] = [:]
     private var currentDtcRequestName = ""
     private var currentDtcRequestBytes = ""
 
@@ -61,6 +63,19 @@ public final class ScreenController {
     }
 
     private func log(_ s: String) { onLog?(s) }
+
+    /// Definition and decoding details of a display / input value (long-press in the UI).
+    public func diagnostics(forData name: String) -> String {
+        ecu.diagnostics(forData: name, responses: lastResponses)
+    }
+
+    /// The ECU file (and its layout) as stored in ecu.zip.
+    public func ecuFiles() -> [(name: String, data: Data)] {
+        var out = [(name: String, data: Data)]()
+        if let d = zip?.data(href) { out.append((href, d)) }
+        if let l = zip?.data(href + ".layout") { out.append((href + ".layout", l)) }
+        return out
+    }
 
     // MARK: - Events (messageHandler)
 
@@ -224,6 +239,7 @@ public final class ScreenController {
         }
         for name in displaysRequestSet.union(startRequestSet) {
             guard let request = ecu.request(name), request.sentBytes == req else { continue }
+            lastResponses[name] = response
             let values: [String: (value: String, unit: String)]
             do {
                 values = try ecu.requestValuesWithUnit(JavaCompat.hexStringToBytes(response), request: name)

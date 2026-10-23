@@ -228,9 +228,12 @@ public final class EcuData {
     public var descriptionText: String?
     public var unit = ""
     public var comment = ""
+    /// The JSON object this definition was read from (for diagnostics).
+    public let raw: [String: Any]
 
     init(json: [String: Any], name: String) {
         self.name = name
+        self.raw = json
         if let v = J.int(json["bitscount"]) { bitsCount = v }
         if let v = J.bool(json["scaled"]) { scaled = v }
         if let v = J.bool(json["byte"]) { isByte = v }
@@ -437,5 +440,62 @@ public struct EcuRequest {
             guard let o = J.obj(value) else { continue }
             receiveDataItems[key] = EcuDataItem(json: o, name: key)
         }
+    }
+}
+
+// MARK: - Diagnostics
+
+extension Ecu {
+    /// One-line health summary of the data definitions, written to the log when a screen opens.
+    public var dataSummary: String {
+        let all = Array(data.values)
+        let scaled = all.filter(\.scaled).count
+        let unitOnly = all.filter { !$0.scaled && !$0.unit.isEmpty }.count
+        var s = "ECU data: \(all.count) items, \(scaled) scaled"
+        if unitOnly > 0 { s += ", \(unitOnly) with a unit but not scaled" }
+        if let raw = all.lazy.compactMap({ $0.raw["scaled"] }).first {
+            s += " (\"scaled\" is stored as \(raw) : \(type(of: raw)))"
+        }
+        return s
+    }
+
+    /// Definition of a data item and how it decodes `responses` (request name → reply hex).
+    public func diagnostics(forData name: String, responses: [String: String] = [:]) -> String {
+        guard let d = data[name] else { return "Data \"\(name)\" is not defined in this ECU file." }
+        var out = ["Data: \(name)"]
+        for (reqName, req) in requests.sorted(by: { $0.key < $1.key }) {
+            guard let item = req.receiveDataItems[name] else { continue }
+            out.append("")
+            out.append("Request: \(reqName)")
+            out.append("  sent \(req.sentBytes), reply \(req.replyBytes), minbytes \(req.minBytes)")
+            out.append("  firstbyte \(item.firstByte), bitoffset \(item.bitOffset), endian '\(item.endian)'")
+            if let resp = responses[reqName] {
+                out.append("  last response: \(resp)")
+                if let bytes = try? JavaCompat.hexStringToBytes(resp) {
+                    let hex = (try? d.hexValue(bytes, item, globalEndian: globalEndian)) ?? "<error>"
+                    let shown = (try? d.displayValue(bytes, item, globalEndian: globalEndian)) ?? "<error>"
+                    out.append("  raw value: \(hex) → \(shown) \(d.unit)")
+                }
+            } else {
+                out.append("  no response yet")
+            }
+        }
+        out.append("")
+        out.append("Parsed definition:")
+        out.append("  scaled \(d.scaled), signed \(d.signed), ascii \(d.bytesASCII)")
+        out.append("  bitscount \(d.bitsCount), bytescount \(d.bytesCount)")
+        out.append("  step \(d.step), offset \(d.offset), divideby \(d.divideBy)")
+        out.append("  format '\(d.format)', unit '\(d.unit)', list entries \(d.lists.count)")
+        out.append("  ECU endian '\(globalEndian)'")
+        out.append("")
+        out.append("JSON in the ECU file:")
+        for (k, v) in d.raw.sorted(by: { $0.key < $1.key }) {
+            if k == "lists" {
+                out.append("  lists: \(J.obj(v)?.count ?? 0) entries")
+            } else {
+                out.append("  \(k): \(v)  [\(type(of: v))]")
+            }
+        }
+        return out.joined(separator: "\n")
     }
 }

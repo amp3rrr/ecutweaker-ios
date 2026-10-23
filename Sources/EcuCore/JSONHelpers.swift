@@ -50,14 +50,21 @@ enum J {
         return nil
     }
 
+    /// Lenient boolean: JSON true/false, numbers (non-zero = true, like DDT4All's
+    /// Python truthiness) and the strings "true"/"false"/"1"/"0".
     static func bool(_ v: Any?) -> Bool? {
         guard let v else { return nil }
         if let b = v as? Bool { return b }
+        if let n = v as? NSNumber { return n.doubleValue != 0 }
+        if let i = v as? Int { return i != 0 }
+        if let d = v as? Double { return d != 0 }
         if let s = v as? String {
-            if s.caseInsensitiveCompare("true") == .orderedSame { return true }
-            if s.caseInsensitiveCompare("false") == .orderedSame { return false }
+            switch s.trimmingCharacters(in: .whitespaces).lowercased() {
+            case "true", "1", "yes": return true
+            case "false", "0", "no", "": return false
+            default: return nil
+            }
         }
-        if let n = v as? NSNumber { return n.boolValue }
         return nil
     }
 }

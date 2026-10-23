@@ -162,3 +162,31 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(EcuDatabase.asciiPayload("62F18A414243202020", stripPadding: true), "ABC")
     }
 }
+
+final class DiagnosticsTests: XCTestCase {
+    func testScaledFlagVariantsAndDiagnostics() throws {
+        let json = """
+        {"endian": "Big",
+         "requests": [{"name": "Read", "sentbytes": "222809", "replybytes": "622809",
+                       "receivebyte_dataitems": {"A": {"firstbyte": 4}, "B": {"firstbyte": 4},
+                                                 "C": {"firstbyte": 4}, "D": {"firstbyte": 4}}}],
+         "data": {
+           "A": {"bitscount": 16, "bytescount": 2, "scaled": true, "step": 0.25, "unit": "rpm"},
+           "B": {"bitscount": 16, "bytescount": 2, "scaled": 1, "step": 0.25, "unit": "rpm"},
+           "C": {"bitscount": 16, "bytescount": 2, "scaled": "1", "step": 0.25, "unit": "rpm"},
+           "D": {"bitscount": 16, "bytescount": 2, "unit": "rpm"}
+         }}
+        """
+        let ecu = try Ecu(json: json)
+        let bytes = try JavaCompat.hexStringToBytes("6228090C12")
+        let v = try ecu.requestValues(bytes, request: "Read", withUnits: true)
+        XCTAssertEqual(v["A"], "772.50 rpm")
+        XCTAssertEqual(v["B"], "772.50 rpm")
+        XCTAssertEqual(v["C"], "772.50 rpm")
+        XCTAssertEqual(v["D"], "0c12 rpm")
+        XCTAssertTrue(ecu.dataSummary.contains("4 items, 3 scaled, 1 with a unit but not scaled"), ecu.dataSummary)
+        let text = ecu.diagnostics(forData: "A", responses: ["Read": "6228090C12"])
+        XCTAssertTrue(text.contains("raw value: 0c12 → 772.50 rpm"), text)
+        XCTAssertTrue(text.contains("scaled true"), text)
+    }
+}
