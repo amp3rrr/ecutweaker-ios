@@ -68,6 +68,28 @@ The app looks for `ecu.zip` in its Documents folder:
    With a free Apple ID the app must be re-signed every 7 days. Your data (ecu.zip, settings) is
    kept as long as you install over the existing app.
 
+### TestFlight (paid Apple Developer account)
+
+The **TestFlight** workflow (manual run, or push a `v*` tag) archives the app, signs it with the
+team's distribution certificate through an App Store Connect API key, and uploads the build.
+Internal testers then install it from the TestFlight app. No App Review is needed, and builds
+last 90 days.
+
+One-time setup:
+
+1. In App Store Connect, go to **Users and Access → Integrations → App Store Connect API** and
+   create a *Team key* with the **Admin** role. Write down the Key ID and the Issuer ID, and
+   download `AuthKey_XXXX.p8`.
+2. Go to **Certificates, IDs & Profiles → Identifiers** and register the App ID, using your own
+   bundle id (e.g. `pl.amp3rrr.ecutweaker`). Then go to **Apps → +** and create the app record
+   with that bundle id.
+3. In GitHub, open **Settings → Secrets and variables → Actions** and add:
+   * variables `APPLE_TEAM_ID` and `BUNDLE_ID`;
+   * secrets `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8`. For `ASC_KEY_P8`, paste the whole
+     content of the .p8 file.
+4. Go to **Actions → TestFlight → Run workflow**. After about 10–20 minutes of processing, the
+   build appears in App Store Connect → TestFlight. Add yourself as an internal tester.
+
 ### With a Mac
 
 ```sh
