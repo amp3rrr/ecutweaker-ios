@@ -59,14 +59,23 @@ The app looks for `ecu.zip` in its Documents folder:
 
 ## Building and installing
 
-### Without a Mac (GitHub Actions + Sideloadly)
+### Without a Mac (sideloading from Windows, macOS or Linux)
 
-1. Every push to `main` runs the **Build** workflow: tests, then an unsigned
-   `EcuTweaker-unsigned.ipa` built on a macOS runner and published as the **latest** pre-release
-   (Releases → *Latest build*).
-2. Install it with [Sideloadly](https://sideloadly.io) on Windows, signing with your Apple ID.
-   With a free Apple ID the app must be re-signed every 7 days. Your data (ecu.zip, settings) is
-   kept as long as you install over the existing app.
+1. Download `EcuTweaker-unsigned.ipa` from
+   [Releases → Latest build](https://github.com/amp3rrr/ecutweaker-ios/releases/tag/latest).
+   Every push to `main` rebuilds it on a macOS runner.
+2. Install it with [iloader](https://github.com/nab138/iloader) (Windows needs iTunes installed):
+   * connect the iPhone with a cable;
+   * sign in with your Apple ID;
+   * choose *Import IPA*.
+
+   As of October 2026, Sideloadly fails to log in to Apple with error -80046, while iloader works.
+3. On the iPhone:
+   * trust the developer certificate in Settings → General → VPN & Device Management;
+   * on iOS 16 or later, enable Settings → Privacy & Security → Developer Mode.
+
+With a free Apple ID the app must be re-installed every 7 days. Your data (ecu.zip, settings) is
+kept as long as you install over the existing app.
 
 ### TestFlight (paid Apple Developer account)
 
