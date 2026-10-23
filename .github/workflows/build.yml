@@ -18,6 +18,8 @@ jobs:
   ios:
     name: iOS app (unsigned IPA)
     runs-on: macos-15
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -45,11 +47,29 @@ jobs:
             build | tee xcodebuild.log | grep -E "error:|warning: .*deprecated|BUILD (SUCCEEDED|FAILED)" || true
           test -d build/Build/Products/Release-iphoneos/EcuTweaker.app
 
+      - name: Report compiler warnings as annotations
+        if: always()
+        run: |
+          grep -E ": (warning|error): " xcodebuild.log | sed -E 's#^.*/(App|Sources)/#\1/#' | sort -u | head -50 \
+            | while IFS= read -r line; do echo "::warning::$line"; done || true
+
       - name: Package IPA
         run: |
           mkdir -p Payload
           cp -R build/Build/Products/Release-iphoneos/EcuTweaker.app Payload/
           zip -qry EcuTweaker-unsigned.ipa Payload
+
+      - name: Publish rolling "latest" pre-release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest EcuTweaker-unsigned.ipa \
+            --prerelease \
+            --target "${{ github.sha }}" \
+            --title "Latest build #${{ github.run_number }}" \
+            --notes "Unsigned IPA built from ${{ github.sha }}. Install with Sideloadly (or AltStore/SideStore)."
 
       - uses: actions/upload-artifact@v4
         with:

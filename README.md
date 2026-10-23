@@ -61,8 +61,9 @@ The app looks for `ecu.zip` in its Documents folder:
 
 ### Without a Mac (GitHub Actions + Sideloadly)
 
-1. Push this repository to GitHub. The **Build** workflow runs the tests and builds an unsigned
-   `EcuTweaker-unsigned.ipa` on a macOS runner (see the run's artifacts).
+1. Every push to `main` runs the **Build** workflow: tests, then an unsigned
+   `EcuTweaker-unsigned.ipa` built on a macOS runner and published as the **latest** pre-release
+   (Releases → *Latest build*).
 2. Install it with [Sideloadly](https://sideloadly.io) on Windows, signing with your Apple ID.
    With a free Apple ID the app must be re-signed every 7 days. Your data (ecu.zip, settings) is
    kept as long as you install over the existing app.
