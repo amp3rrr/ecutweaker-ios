@@ -162,6 +162,11 @@ final class ElmSessionTests: XCTestCase {
         XCTAssertTrue(mock.log.contains("AT CRA 76B"))
         XCTAssertTrue(mock.log.contains("AT SP 6"))
         XCTAssertFalse(mock.log.contains("AT CFC0"))
+        // CAF0/S0/AL are re-applied after AT SP (vLinker FS resets them on a protocol change)
+        if let sp = mock.log.lastIndex(of: "AT SP 6") {
+            XCTAssertTrue(mock.log[sp...].contains("AT CAF0"))
+            XCTAssertTrue(mock.log[sp...].contains("AT S0"))
+        }
         s.disconnect()
     }
 

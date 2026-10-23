@@ -7,6 +7,17 @@ enum J {
         try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
     }
 
+    /// Runs `body` in an autorelease pool on Apple platforms, so the temporary Foundation
+    /// objects of a large JSON parse (db.json, projects.json, ECU files) are freed at once
+    /// instead of when the thread's pool happens to drain.
+    static func releasingTemporaries<T>(_ body: () throws -> T) rethrows -> T {
+        #if canImport(ObjectiveC)
+        return try autoreleasepool { try body() }
+        #else
+        return try body()
+        #endif
+    }
+
     static func parseObject(_ text: String) throws -> [String: Any] {
         guard let obj = try parse(Data(text.utf8)) as? [String: Any] else {
             throw EcuError.database("JSON root is not an object")

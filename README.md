@@ -47,6 +47,10 @@ screens, buttons, DTC read/clear, and old and UDS identification.
 * Changing screens no longer drops a pending bus initialisation.
 * `format: "bin"` shows the number, as DDT4All does. Java printed `bin123`.
 * `ecu.zip` is read through its central directory, so no `ecu.idx` index file is needed.
+* The CAN bus speed comes from the ECU file (`obd.baudrate`), as in DDT4All, so 250 kbit/s ECUs
+  are opened with `AT SP 8`/`9`. The Android app always used 500 kbit/s.
+* After `AT SP`, `AT CAF0`, `AT S0` and `AT AL` are sent again, as DDT4All does, because some clones
+  (vLinker FS among them) reset them when the protocol changes.
 
 ## Getting `ecu.zip` onto the iPhone
 

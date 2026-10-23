@@ -189,4 +189,13 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertTrue(text.contains("raw value: 0c12 → 772.50 rpm"), text)
         XCTAssertTrue(text.contains("scaled true"), text)
     }
+
+    func testCanSpeedFromEcuFile() throws {
+        let slow = try Ecu(json: #"{"obd": {"protocol": "CAN", "send_id": "745", "recv_id": "765", "baudrate": 250000}, "requests": [], "data": {}}"#)
+        let fast = try Ecu(json: #"{"obd": {"protocol": "CAN", "send_id": "7E0", "recv_id": "7E8", "baudrate": 500000}, "requests": [], "data": {}}"#)
+        let none = try Ecu(json: #"{"obd": {"protocol": "CAN", "send_id": "7E0", "recv_id": "7E8"}, "requests": [], "data": {}}"#)
+        XCTAssertTrue(slow.isCan250)
+        XCTAssertFalse(fast.isCan250)
+        XCTAssertFalse(none.isCan250)
+    }
 }

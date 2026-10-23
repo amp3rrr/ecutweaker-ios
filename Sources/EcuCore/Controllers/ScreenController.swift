@@ -43,7 +43,7 @@ public final class ScreenController {
 
     public init(ecuJSON: String, layoutJSON: String?, href: String, session: ElmSession,
                 zip: ZipFileSystem?, softFlowControl: Bool = false) throws {
-        ecu = try Ecu(json: ecuJSON)
+        ecu = try J.releasingTemporaries { try Ecu(json: ecuJSON) }
         if let lj = layoutJSON, let l = try? Layout(json: lj) {
             layout = l
         } else {
@@ -66,7 +66,12 @@ public final class ScreenController {
 
     /// Definition and decoding details of a display / input value (long-press in the UI).
     public func diagnostics(forData name: String) -> String {
-        ecu.diagnostics(forData: name, responses: lastResponses)
+        // Re-read the entry from the file instead of keeping every raw JSON object in memory.
+        let raw: [String: Any]? = J.releasingTemporaries {
+            guard let d = zip?.data(href), let root = try? J.parse(d) as? [String: Any] else { return nil }
+            return J.obj(root["data"]).flatMap { J.obj($0[name]) }
+        }
+        return ecu.diagnostics(forData: name, responses: lastResponses, rawJSON: raw)
     }
 
     /// The ECU file (and its layout) as stored in ecu.zip.
@@ -130,8 +135,7 @@ public final class ScreenController {
         switch ecu.protocolName {
         case "CAN":
             session.setEcuName(ecu.name)
-            let brp = ecu.sdsRequests["brp"] == "1"
-            session.initCan(rxa: ecu.rxId, txa: ecu.txId, canline: 0, brp: brp)
+            session.initCan(rxa: ecu.rxId, txa: ecu.txId, canline: 0, brp: ecu.isCan250)
         case "KWP2000":
             session.initKwp(address: ecu.functionalAddress, fastInit: ecu.fastInit)
         case "ISO8":

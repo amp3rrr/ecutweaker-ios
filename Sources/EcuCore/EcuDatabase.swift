@@ -64,23 +64,29 @@ public final class EcuDatabase: @unchecked Sendable {
     public private(set) var ecuFilePath: String?
 
     public init(projectsJSON: Data) throws {
-        guard let root = try J.parse(projectsJSON) as? [String: Any],
-              let projectsObj = J.obj(root["projects"]) else {
-            throw EcuError.database("projects.json not found or not loaded!")
-        }
-        for (name, value) in projectsObj {
-            guard let p = J.obj(value), let code = J.str(p["code"]) else { continue }
-            var project = Project(name: name, code: code)
-            for (k, v) in J.obj(p["addressing"]) ?? [:] {
-                project.addressing[k] = (J.arr(v) ?? []).compactMap { J.str($0) }
+        let parsed = try J.releasingTemporaries { () throws -> ([String: Project], [String: String]) in
+            guard let root = try J.parse(projectsJSON) as? [String: Any],
+                  let projectsObj = J.obj(root["projects"]) else {
+                throw EcuError.database("projects.json not found or not loaded!")
             }
-            project.snat = Self.stringMap(p["snat"])
-            project.snatExt = Self.stringMap(p["snat_ext"])
-            project.dnat = Self.stringMap(p["dnat"])
-            project.dnatExt = Self.stringMap(p["dnat_ext"])
-            projects[name] = project
-            modelsMap[code] = name
+            var projects = [String: Project](), models = [String: String]()
+            for (name, value) in projectsObj {
+                guard let p = J.obj(value), let code = J.str(p["code"]) else { continue }
+                var project = Project(name: name, code: code)
+                for (k, v) in J.obj(p["addressing"]) ?? [:] {
+                    project.addressing[k] = (J.arr(v) ?? []).compactMap { J.str($0) }
+                }
+                project.snat = Self.stringMap(p["snat"])
+                project.snatExt = Self.stringMap(p["snat_ext"])
+                project.dnat = Self.stringMap(p["dnat"])
+                project.dnatExt = Self.stringMap(p["dnat_ext"])
+                projects[name] = project
+                models[code] = name
+            }
+            return (projects, models)
         }
+        projects = parsed.0
+        modelsMap = parsed.1
         buildMaps("ALL")
     }
 
@@ -175,38 +181,42 @@ public final class EcuDatabase: @unchecked Sendable {
             throw EcuError.database("Ecu file (ecu.zip) not found")
         }
         let zfs = try ZipFileSystem(path: zipPath)
-        guard let dbData = zfs.data("db.json"), !dbData.isEmpty else {
-            throw EcuError.database("Database (db.json) file not found")
-        }
-        guard let root = try? J.parse(dbData) as? [String: Any] else {
-            throw EcuError.database("JSON conversion issue")
-        }
+        let (infos, projectSet, addresses) = try J.releasingTemporaries {
+            () throws -> ([Int: [EcuInfo]], Set<String>, Set<Int>) in
+            guard let dbData = zfs.data("db.json"), !dbData.isEmpty else {
+                throw EcuError.database("Database (db.json) file not found")
+            }
+            guard let root = try? J.parse(dbData) as? [String: Any] else {
+                throw EcuError.database("JSON conversion issue")
+            }
 
-        var infos = [Int: [EcuInfo]]()
-        var projectSet = Set<String>()
-        var addresses = Set<Int>()
-        for (href, value) in root {
-            guard let o = J.obj(value),
-                  let addrStr = J.str(o["address"]),
-                  let addr = JavaCompat.parseIntOrNil(addrStr, radix: 16) else {
-                throw EcuError.database("JSON parsing issue (\(href))")
+            var infos = [Int: [EcuInfo]]()
+            var projectSet = Set<String>()
+            var addresses = Set<Int>()
+            for (href, value) in root {
+                guard let o = J.obj(value),
+                      let addrStr = J.str(o["address"]),
+                      let addr = JavaCompat.parseIntOrNil(addrStr, radix: 16) else {
+                    throw EcuError.database("JSON parsing issue (\(href))")
+                }
+                let projects = Set((J.arr(o["projects"]) ?? []).compactMap { J.str($0)?.uppercased() })
+                projectSet.formUnion(projects)
+                addresses.insert(addr)
+                let idents: [EcuIdent] = (J.arr(o["autoidents"]) ?? []).compactMap { J.obj($0) }.map {
+                    EcuIdent(supplierCode: J.str($0["supplier_code"]) ?? "",
+                             softVersion: J.str($0["soft_version"]) ?? "",
+                             version: J.str($0["version"]) ?? "",
+                             diagnosticVersion: J.str($0["diagnostic_version"]) ?? "")
+                }
+                let info = EcuInfo(href: href,
+                                   ecuName: J.str(o["ecuname"]) ?? href,
+                                   protocolName: J.str(o["protocol"]) ?? "",
+                                   addressId: addr,
+                                   projects: projects,
+                                   idents: idents)
+                infos[addr, default: []].append(info)
             }
-            let projects = Set((J.arr(o["projects"]) ?? []).compactMap { J.str($0)?.uppercased() })
-            projectSet.formUnion(projects)
-            addresses.insert(addr)
-            let idents: [EcuIdent] = (J.arr(o["autoidents"]) ?? []).compactMap { J.obj($0) }.map {
-                EcuIdent(supplierCode: J.str($0["supplier_code"]) ?? "",
-                         softVersion: J.str($0["soft_version"]) ?? "",
-                         version: J.str($0["version"]) ?? "",
-                         diagnosticVersion: J.str($0["diagnostic_version"]) ?? "")
-            }
-            let info = EcuInfo(href: href,
-                               ecuName: J.str(o["ecuname"]) ?? href,
-                               protocolName: J.str(o["protocol"]) ?? "",
-                               addressId: addr,
-                               projects: projects,
-                               idents: idents)
-            infos[addr, default: []].append(info)
+            return (infos, projectSet, addresses)
         }
 
         ecuInfo = infos

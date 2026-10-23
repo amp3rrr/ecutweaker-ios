@@ -13,6 +13,10 @@ public final class Ecu {
     public private(set) var txId: String = ""
     public private(set) var rxId: String = ""
     public private(set) var fastInit: Bool = false
+    /// CAN bus speed from the ECU file (obd.baudrate), 0 when absent.
+    public private(set) var baudRate: Int = 0
+    /// How the first "scaled" flag in the file was stored (diagnostics).
+    public private(set) var scaledFlagSample: String?
     public private(set) var defaultSDS: String = "10C0"
 
     public convenience init(json: String) throws {
@@ -35,6 +39,7 @@ public final class Ecu {
             if protocolName == "CAN" {
                 txId = J.str(obd["send_id"]) ?? ""
                 rxId = J.str(obd["recv_id"]) ?? ""
+                baudRate = J.int(obd["baudrate"]) ?? 0
             }
             if protocolName == "KWP2000" {
                 fastInit = J.bool(obd["fastinit"]) ?? false
@@ -50,6 +55,9 @@ public final class Ecu {
         for (key, value) in J.obj(ecudef["data"]) ?? [:] {
             guard let dataObj = J.obj(value) else { continue }
             data[key] = EcuData(json: dataObj, name: key)
+            if scaledFlagSample == nil, let raw = dataObj["scaled"] {
+                scaledFlagSample = "\(raw) : \(type(of: raw))"
+            }
         }
 
         gatherSdsRequests()
@@ -86,6 +94,12 @@ public final class Ecu {
                 sdsRequests[requestName] = request.sentBytes
             }
         }
+    }
+
+    /// DDT4All (ecu_file.py): a 250 kbit/s ECU is flagged "brp" so the bus is opened
+    /// with AT SP 8/9. The Android app never read obd.baudrate and always used 500 kbit/s.
+    public var isCan250: Bool {
+        baudRate == 250_000 || baudRate == 10_400 || sdsRequests["brp"] == "1"
     }
 
     public func setDefaultSDS(_ sdsName: String) {
@@ -228,12 +242,9 @@ public final class EcuData {
     public var descriptionText: String?
     public var unit = ""
     public var comment = ""
-    /// The JSON object this definition was read from (for diagnostics).
-    public let raw: [String: Any]
 
     init(json: [String: Any], name: String) {
         self.name = name
-        self.raw = json
         if let v = J.int(json["bitscount"]) { bitsCount = v }
         if let v = J.bool(json["scaled"]) { scaled = v }
         if let v = J.bool(json["byte"]) { isByte = v }
@@ -453,14 +464,15 @@ extension Ecu {
         let unitOnly = all.filter { !$0.scaled && !$0.unit.isEmpty }.count
         var s = "ECU data: \(all.count) items, \(scaled) scaled"
         if unitOnly > 0 { s += ", \(unitOnly) with a unit but not scaled" }
-        if let raw = all.lazy.compactMap({ $0.raw["scaled"] }).first {
-            s += " (\"scaled\" is stored as \(raw) : \(type(of: raw)))"
-        }
+        if let sample = scaledFlagSample { s += " (\"scaled\" stored as \(sample))" }
+        if protocolName == "CAN" { s += ", CAN \(isCan250 ? 250 : 500) kbit/s" }
         return s
     }
 
     /// Definition of a data item and how it decodes `responses` (request name → reply hex).
-    public func diagnostics(forData name: String, responses: [String: String] = [:]) -> String {
+    /// `rawJSON`: the item's entry in the file's "data" object, re-read on demand by the caller.
+    public func diagnostics(forData name: String, responses: [String: String] = [:],
+                            rawJSON: [String: Any]? = nil) -> String {
         guard let d = data[name] else { return "Data \"\(name)\" is not defined in this ECU file." }
         var out = ["Data: \(name)"]
         for (reqName, req) in requests.sorted(by: { $0.key < $1.key }) {
@@ -489,7 +501,7 @@ extension Ecu {
         out.append("  ECU endian '\(globalEndian)'")
         out.append("")
         out.append("JSON in the ECU file:")
-        for (k, v) in d.raw.sorted(by: { $0.key < $1.key }) {
+        for (k, v) in (rawJSON ?? [:]).sorted(by: { $0.key < $1.key }) {
             if k == "lists" {
                 out.append("  lists: \(J.obj(v)?.count ?? 0) entries")
             } else {

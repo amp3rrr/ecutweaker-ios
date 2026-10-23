@@ -296,6 +296,11 @@ public final class ElmSession: @unchecked Sendable {
             else if canline == 4 { write("STPBR 250000") }
             else if canline == 5 { write("STPBR 125000") }
         }
+        // As in DDT4All: some ELM327 clones (vLinker FS among them) reset CAF/S/AL
+        // to their defaults when the protocol changes, so re-apply them after AT SP.
+        write("AT CAF0")
+        write("AT S0")
+        write("AT AL")
     }
 
     private func initIso() {
@@ -704,10 +709,22 @@ public final class ElmSession: @unchecked Sendable {
         openLogFile()
     }
 
+    /// The log file is rotated at this size (one previous file, log.old.txt, is kept).
+    public var maxLogFileSize: UInt64 = 5_000_000
+
     private func writeLog(_ line: String) {
         logLock.lock(); defer { logLock.unlock() }
         guard let h = logHandle else { return }
         try? h.write(contentsOf: Data((line + "\n").utf8))
+        if let size = try? h.offset(), size > maxLogFileSize, let url = logURL {
+            try? h.close()
+            logHandle = nil
+            let old = url.deletingPathExtension().appendingPathExtension("old.txt")
+            try? FileManager.default.removeItem(at: old)
+            try? FileManager.default.moveItem(at: url, to: old)
+            _ = FileManager.default.createFile(atPath: url.path, contents: nil)
+            logHandle = try? FileHandle(forWritingTo: url)
+        }
     }
 
     private static let tsFormatter: DateFormatter = {
