@@ -1,0 +1,44 @@
+# XcodeGen spec — generate the Xcode project with:  xcodegen generate
+name: EcuTweaker
+options:
+  bundleIdPrefix: org.quark.dr
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+targets:
+  EcuTweaker:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - "Resources/**"
+          - "Info.plist"
+      - path: App/Resources
+        buildPhase: resources
+      - path: Sources/EcuCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.quark.dr.ecutweaker.ios
+        INFOPLIST_FILE: App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_PREVIEWS: YES
+        SWIFT_STRICT_CONCURRENCY: minimal
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+schemes:
+  EcuTweaker:
+    build:
+      targets:
+        EcuTweaker: all
+    run:
+      config: Debug
+    archive:
+      config: Release

@@ -1,0 +1,63 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core-tests-linux:
+    name: EcuCore tests (Linux, zlib)
+    runs-on: ubuntu-latest
+    container: swift:6.0
+    steps:
+      - uses: actions/checkout@v4
+      - run: apt-get update -qq && apt-get install -y -qq zlib1g-dev
+      - run: swift test
+
+  ios:
+    name: iOS app (unsigned IPA)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: EcuCore tests (macOS, Compression framework)
+        run: swift test
+
+      - name: Generate Xcode project
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          xcodegen generate
+
+      - name: Build for device (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project EcuTweaker.xcodeproj \
+            -scheme EcuTweaker \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            MARKETING_VERSION="0.1.${{ github.run_number }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tee xcodebuild.log | grep -E "error:|warning: .*deprecated|BUILD (SUCCEEDED|FAILED)" || true
+          test -d build/Build/Products/Release-iphoneos/EcuTweaker.app
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/EcuTweaker.app Payload/
+          zip -qry EcuTweaker-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EcuTweaker-unsigned-ipa
+          path: EcuTweaker-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
